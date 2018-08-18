@@ -2094,14 +2094,24 @@ sub _dump_to_dir {
     {
         local $self->{version_to_dump} = $self->schema_version_to_dump;
         my $schema_text = $file2data->{ _get_dump_basename($schema_class) };
-        $self->_write_classfile($schema_class, $schema_text, 1);
+        my ($new_text, @files_to_delete) =
+            $self->_update_class_from_file($schema_class, $schema_text, 1);
+        unlink @files_to_delete;
+        if (defined $new_text) {
+            $self->_write_classfile($schema_class, $new_text);
+        }
     }
 
     my $result_base_class = $self->result_base_class || 'DBIx::Class::Core';
 
     foreach my $src_class (@classes) {
         my $src_text = $file2data->{ _get_dump_basename($src_class) };
-        $self->_write_classfile($src_class, $src_text);
+        my ($new_text, @files_to_delete) =
+            $self->_update_class_from_file($src_class, $src_text);
+        unlink @files_to_delete;
+        if (defined $new_text) {
+            $self->_write_classfile($src_class, $new_text);
+        }
     }
 
     # remove Result dir if downgrading from use_namespaces, and there are no
@@ -2269,12 +2279,7 @@ sub _update_class_from_file {
 }
 
 sub _write_classfile {
-    my ($self, $class, $text, $is_schema) = @_;
-
-    ($text, my @files_to_delete) =
-        $self->_update_class_from_file($class, $text, $is_schema);
-    return if !defined $text;
-    unlink @files_to_delete;
+    my ($self, $class, $text) = @_;
 
     my $filename = $self->_get_dump_filename($class);
     $self->_ensure_dump_subdirs($class);
