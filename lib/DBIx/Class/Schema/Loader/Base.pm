@@ -1983,15 +1983,13 @@ sub _ensure_dump_subdirs {
     }
 }
 
-sub _dump_to_dir {
+# returns \%file2data
+sub _dump_to_data {
     my ($self, @classes) = @_;
+    my %file2data;
 
     my $schema_class = $self->schema_class;
     my $schema_base_class = $self->schema_base_class || 'DBIx::Class::Schema';
-
-    my $target_dir = $self->dump_directory;
-    warn "Dumping manual schema for $schema_class to directory $target_dir ...\n"
-        unless $self->dynamic or $self->quiet;
 
     my $schema_text =
           qq|use utf8;\n|
@@ -2043,11 +2041,7 @@ sub _dump_to_dir {
     else {
         $schema_text .= qq|__PACKAGE__->load_classes;\n|;
     }
-
-    {
-        local $self->{version_to_dump} = $self->schema_version_to_dump;
-        $self->_write_classfile($schema_class, $schema_text, 1);
-    }
+    $file2data{ _get_dump_basename($schema_class) } = $schema_text;
 
     my $result_base_class = $self->result_base_class || 'DBIx::Class::Core';
 
@@ -2080,6 +2074,33 @@ sub _dump_to_dir {
             $src_text .= qq|use base '$result_base_class';\n|;
         }
 
+        $file2data{ _get_dump_basename($src_class) } = $src_text;
+    }
+
+    return \%file2data;
+}
+
+sub _dump_to_dir {
+    my ($self, @classes) = @_;
+
+    my $schema_class = $self->schema_class;
+
+    my $target_dir = $self->dump_directory;
+    warn "Dumping manual schema for $schema_class to directory $target_dir ...\n"
+        unless $self->dynamic or $self->quiet;
+
+    my $file2data = $self->_dump_to_data(@classes);
+
+    {
+        local $self->{version_to_dump} = $self->schema_version_to_dump;
+        my $schema_text = $file2data->{ _get_dump_basename($schema_class) };
+        $self->_write_classfile($schema_class, $schema_text, 1);
+    }
+
+    my $result_base_class = $self->result_base_class || 'DBIx::Class::Core';
+
+    foreach my $src_class (@classes) {
+        my $src_text = $file2data->{ _get_dump_basename($src_class) };
         $self->_write_classfile($src_class, $src_text);
     }
 
