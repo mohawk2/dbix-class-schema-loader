@@ -176,7 +176,7 @@ while(@invocations) {
 
     my $schema = do {
         local $SIG{__WARN__} = sigwarn_silencer(
-            qr/Deleting existing file .+ due to 'really_erase_my_files' setting/
+            qr/Ignoring existing file .+ due to 'really_erase_my_files' setting/
         );
         $cref->();
     };

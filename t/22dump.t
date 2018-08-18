@@ -76,9 +76,9 @@ lives_ok {
     warnings_exist { DBICTest::Schema::2->connect($make_dbictest_db::dsn) }
         [
             qr/^Dumping manual schema/,
-            qr|^Deleting .+Schema/2.+ due to 'really_erase_my_files'|,
-            qr|^Deleting .+Schema/2/Result/Foo.+ due to 'really_erase_my_files'|,
-            qr|^Deleting .+Schema/2/Result/Bar.+ due to 'really_erase_my_files'|,
+            qr|^Ignoring .+Schema/2.+ due to 'really_erase_my_files'|,
+            qr|^Ignoring .+Schema/2/Result/Foo.+ due to 'really_erase_my_files'|,
+            qr|^Ignoring .+Schema/2/Result/Bar.+ due to 'really_erase_my_files'|,
             qr/^Schema dump completed/
         ];
 } 'no death with dump_directory set (overwrite2)' or diag "Dump failed: $@";

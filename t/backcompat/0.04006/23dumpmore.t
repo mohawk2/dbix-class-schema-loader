@@ -147,9 +147,9 @@ do_dump_test(
     error => '',
     warnings => [
         qr/Dumping manual schema for DBICTest::DumpMore::1 to directory /,
-        qr/Deleting existing file /,
-        qr/Deleting existing file /,
-        qr/Deleting existing file /,
+        qr/Ignoring existing file /,
+        qr/Ignoring existing file /,
+        qr/Ignoring existing file /,
         qr/Schema dump completed/,
     ],
     regexes => {
