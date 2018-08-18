@@ -1936,11 +1936,15 @@ sub _reload_class {
     };
 }
 
+sub _get_dump_basename {
+    my ($class) = @_;
+    $class =~ s{::}{/}g;
+    return $class . q{.pm};
+}
+
 sub _get_dump_filename {
     my ($self, $class) = (@_);
-
-    $class =~ s{::}{/}g;
-    return $self->dump_directory . q{/} . $class . q{.pm};
+    return $self->dump_directory . q{/} . _get_dump_basename($class);
 }
 
 =head2 get_dump_filename
