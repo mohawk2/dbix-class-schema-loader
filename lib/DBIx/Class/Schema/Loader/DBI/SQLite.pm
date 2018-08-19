@@ -232,12 +232,13 @@ sub _table_uniq_info {
 sub _tables_list {
     my ($self) = @_;
 
-    my $sth = $self->dbh->prepare("SELECT * FROM sqlite_master");
+    my $sth = $self->dbh->prepare(
+        "SELECT * FROM sqlite_master where type in ('table', 'view')"
+            . " and tbl_name not like 'sqlite_%'"
+    );
     $sth->execute;
     my @tables;
     while ( my $row = $sth->fetchrow_hashref ) {
-        next unless $row->{type} =~ /^(?:table|view)\z/i;
-        next if $row->{tbl_name} =~ /^sqlite_/;
         push @tables, DBIx::Class::Schema::Loader::Table->new(
             loader => $self,
             name   => $row->{tbl_name},
