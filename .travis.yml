@@ -65,6 +65,9 @@ x_disabled_notifications:
 #  directories:
 #    - /var/cache/apt/archives
 
+# the default seems to have switched to 'false' and is needed for eg MySQL
+sudo: required
+
 language: perl
 
 perl:
