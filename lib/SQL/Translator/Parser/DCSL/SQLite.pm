@@ -149,6 +149,38 @@ EOF
     return \@rels;
 }
 
+sub table_uniq_info {
+    my ($dbh, $table, $preserve_case) = @_;
+
+    my $sth = $dbh->prepare(
+        "pragma index_list(" . $dbh->quote($table) . ")"
+    );
+    $sth->execute;
+
+    my @uniqs;
+    while (my $idx = $sth->fetchrow_hashref) {
+        next unless $idx->{unique};
+
+        my $name = $idx->{name};
+
+        my $get_idx_sth = $dbh->prepare("pragma index_info(" . $dbh->quote($name) . ")");
+        $get_idx_sth->execute;
+        my @cols;
+        while (my $idx_row = $get_idx_sth->fetchrow_hashref) {
+            push @cols, maybe_lc($idx_row->{name}, $preserve_case);
+        }
+        $get_idx_sth->finish;
+
+        # Rename because SQLite complains about sqlite_ prefixes on identifiers
+        # and ignores constraint names in DDL.
+        $name = (join '_', @cols) . '_unique';
+
+        push @uniqs, [ $name => \@cols ];
+    }
+    $sth->finish;
+    return [ sort { $a->[0] cmp $b->[0] } @uniqs ];
+}
+
 =head1 SEE ALSO
 
 L<DBIx::Class::Schema::Loader>, L<DBIx::Class::Schema::Loader::Base>,

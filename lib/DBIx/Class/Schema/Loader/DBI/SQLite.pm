@@ -86,34 +86,9 @@ sub _table_fk_info {
 
 sub _table_uniq_info {
     my ($self, $table) = @_;
-
-    my $sth = $self->dbh->prepare(
-        "pragma index_list(" . $self->dbh->quote($table) . ")"
+    return SQL::Translator::Parser::DCSL::SQLite::table_uniq_info(
+        $self->dbh, $table, $self->preserve_case,
     );
-    $sth->execute;
-
-    my @uniqs;
-    while (my $idx = $sth->fetchrow_hashref) {
-        next unless $idx->{unique};
-
-        my $name = $idx->{name};
-
-        my $get_idx_sth = $self->dbh->prepare("pragma index_info(" . $self->dbh->quote($name) . ")");
-        $get_idx_sth->execute;
-        my @cols;
-        while (my $idx_row = $get_idx_sth->fetchrow_hashref) {
-            push @cols, $self->_lc($idx_row->{name});
-        }
-        $get_idx_sth->finish;
-
-        # Rename because SQLite complains about sqlite_ prefixes on identifiers
-        # and ignores constraint names in DDL.
-        $name = (join '_', @cols) . '_unique';
-
-        push @uniqs, [ $name => \@cols ];
-    }
-    $sth->finish;
-    return [ sort { $a->[0] cmp $b->[0] } @uniqs ];
 }
 
 sub _tables_list {
