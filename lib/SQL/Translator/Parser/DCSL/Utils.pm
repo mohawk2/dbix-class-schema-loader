@@ -181,10 +181,9 @@ sub maybe_uc {
 
 sub sth_for {
     my ($dbh, $sql_maker, $table, $fields, $where) = @_;
-
+    $table = $table->sql_name if ref $table;
     my $sth = $dbh->prepare($sql_maker
-        ->select(\$table->sql_name, $fields || \'*', $where));
-
+        ->select(\$table, $fields || \'*', $where));
     return $sth;
 }
 
