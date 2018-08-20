@@ -2,7 +2,7 @@ package SQL::Translator::Parser::DCSL::SQLite;
 
 use strict;
 use warnings;
-use SQL::Translator::Parser::DCSL::Utils qw/columns_info_for_quoted maybe_lc/;
+use SQL::Translator::Parser::DCSL::Utils qw/columns_info_for_quoted maybe_lc filter_tables_sql/;
 
 =head1 NAME
 
@@ -179,6 +179,21 @@ sub table_uniq_info {
     }
     $sth->finish;
     return [ sort { $a->[0] cmp $b->[0] } @uniqs ];
+}
+
+sub tables_list {
+    my ($dbh, $sql_maker) = @_;
+    my $sth = $dbh->prepare(
+        "SELECT * FROM sqlite_master where type in ('table', 'view')"
+            . " and tbl_name not like 'sqlite_%'"
+    );
+    $sth->execute;
+    my @tables;
+    while ( my $row = $sth->fetchrow_hashref ) {
+        push @tables, $row->{tbl_name};
+    }
+    $sth->finish;
+    return filter_tables_sql($dbh, $sql_maker, \@tables);
 }
 
 =head1 SEE ALSO

@@ -7,6 +7,7 @@ use mro 'c3';
 use DBIx::Class::Schema::Loader::Table ();
 
 require SQL::Translator::Parser::DCSL::SQLite;
+use SQL::Translator::Parser::DCSL::Utils qw/filter_tables_constraints/;
 
 our $VERSION = '0.07049';
 
@@ -93,25 +94,22 @@ sub _table_uniq_info {
 
 sub _tables_list {
     my ($self) = @_;
-
-    my $sth = $self->dbh->prepare(
-        "SELECT * FROM sqlite_master where type in ('table', 'view')"
-            . " and tbl_name not like 'sqlite_%'"
+    my @tables = SQL::Translator::Parser::DCSL::SQLite::tables_list(
+        $self->dbh,
+        $self->schema->storage->sql_maker,
     );
-    $sth->execute;
-    my @tables;
-    while ( my $row = $sth->fetchrow_hashref ) {
-        push @tables, DBIx::Class::Schema::Loader::Table->new(
+    my @table_objs;
+    for my $table (@tables) {
+        push @table_objs, DBIx::Class::Schema::Loader::Table->new(
             loader => $self,
-            name   => $row->{tbl_name},
+            name   => $table,
             ($self->db_schema ? (
                 schema        => $self->db_schema->[0],
-                ignore_schema => 1, # for qualify_objects tests
+                ignore_schema => 1,
             ) : ()),
         );
     }
-    $sth->finish;
-    return $self->_filter_tables(\@tables);
+    return filter_tables_constraints(\@table_objs, $self->constraint, $self->exclude);
 }
 
 sub _table_info_matches {

@@ -7,7 +7,10 @@ use Exporter 'import';
 use Carp::Clan qw/^(DBIx::Class|SQL::Translator::Parser::DCSL)/;
 use Try::Tiny;
 
-our @EXPORT_OK = qw/columns_info_for_quoted maybe_lc/;
+our @EXPORT_OK = qw/
+    columns_info_for_quoted maybe_lc
+    filter_tables_sql filter_tables_constraints
+/;
 
 =head1 NAME
 
@@ -185,6 +188,61 @@ sub sth_for {
     my $sth = $dbh->prepare($sql_maker
         ->select(\$table, $fields || \'*', $where));
     return $sth;
+}
+
+# ignore bad tables and views
+sub filter_tables_sql {
+    my ($dbh, $sql_maker, $tables) = @_;
+    my @tables = @$tables;
+    my @filtered_tables;
+    TABLE: for my $table (@tables) {
+        try {
+            local $^W = 0; # for ADO
+            my $sth = sth_for($dbh, $sql_maker, $table, undef, \'1 = 0');
+            $sth->execute;
+            1;
+        }
+        catch {
+            warn "Bad table or view '$table', ignoring: $_\n";
+            0;
+        } or next TABLE;
+        push @filtered_tables, $table;
+    }
+    return @filtered_tables;
+}
+
+# apply constraint/exclude
+sub filter_tables_constraints {
+    my ($tables, $constraint, $exclude) = @_;
+    my @tables = @$tables;
+    @tables = check_constraint(1, $constraint, @tables);
+    @tables = check_constraint(0, $exclude, @tables);
+    return @tables;
+}
+
+sub check_constraint {
+    my ($include, $constraint, @tables) = @_;
+    return @tables unless defined $constraint;
+    return grep { !$include xor recurse_constraint($constraint, @{$_}) } @tables
+        if ref $constraint eq 'ARRAY';
+    return grep { !$include xor /$constraint/ } @tables;
+}
+
+sub recurse_constraint {
+    my ($constraint, @parts) = @_;
+    my $name = shift @parts;
+    # If there are any parts left, the constraint must be an arrayref
+    croak "depth of constraint/exclude array does not match length of moniker_parts"
+        unless !!@parts == !!(ref $constraint eq 'ARRAY');
+    # if ths is the last part, use the constraint directly
+    return $name =~ $constraint unless @parts;
+    # recurse into the first matching subconstraint
+    foreach (@{$constraint}) {
+        my ($re, $sub) = @{$_};
+        return recurse_constraint($sub, @parts)
+            if $name =~ $re;
+    }
+    return 0;
 }
 
 1;
