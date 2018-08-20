@@ -2,9 +2,11 @@ package DBIx::Class::Schema::Loader::DBI::SQLite;
 
 use strict;
 use warnings;
-use base 'DBIx::Class::Schema::Loader::DBI::Component::QuotedDefault';
+use base 'DBIx::Class::Schema::Loader::DBI';
 use mro 'c3';
 use DBIx::Class::Schema::Loader::Table ();
+
+require SQL::Translator::Parser::DCSL::SQLite;
 
 our $VERSION = '0.07049';
 
@@ -58,47 +60,10 @@ sub _columns_info_for {
     my $self = shift;
     my ($table) = @_;
 
-    my $result = $self->next::method(@_);
-
-    local $self->dbh->{FetchHashKeyName} = 'NAME_lc';
-
-    my $sth = $self->dbh->prepare(
-        "pragma table_info(" . $self->dbh->quote_identifier($table) . ")"
+    return SQL::Translator::Parser::DCSL::SQLite::columns_info_for(
+        $self->dbh, $table, $self->preserve_case,
+        $self->schema->storage->sql_maker
     );
-    $sth->execute;
-    my $cols = $sth->fetchall_hashref('name');
-
-    # copy and case according to preserve_case mode
-    # no need to check for collisions, SQLite does not allow them
-    my %cols;
-    while (my ($col, $info) = each %$cols) {
-        $cols{ $self->_lc($col) } = $info;
-    }
-
-    my ($num_pk, $pk_col) = (0);
-    # SQLite doesn't give us the info we need to do this nicely :(
-    # If there is exactly one column marked PK, and its type is integer,
-    # set it is_auto_increment. This isn't 100%, but it's better than the
-    # alternatives.
-    while (my ($col_name, $info) = each %$result) {
-        if ($cols{$col_name}{pk}) {
-            $num_pk++;
-            if (lc($cols{$col_name}{type}) eq 'integer') {
-                $pk_col = $col_name;
-            }
-        }
-    }
-
-    while (my ($col, $info) = each %$result) {
-        if ((eval { ${ $info->{default_value} } }||'') eq 'CURRENT_TIMESTAMP') {
-            ${ $info->{default_value} } = 'current_timestamp';
-        }
-        if ($num_pk == 1 and defined $pk_col and $pk_col eq $col) {
-            $info->{is_auto_increment} = 1;
-        }
-    }
-
-    return $result;
 }
 
 sub _table_fk_info {
