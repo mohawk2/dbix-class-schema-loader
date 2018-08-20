@@ -60,6 +60,95 @@ sub columns_info_for {
     return $result;
 }
 
+sub table_fk_info {
+    my ($dbh, $table, $preserve_case) = @_;
+
+    my $sth = $dbh->prepare(
+        "pragma foreign_key_list(" . $dbh->quote_identifier($table) . ")"
+    );
+    $sth->execute;
+
+    my @rels;
+    while (my $fk = $sth->fetchrow_hashref) {
+        my $rel = $rels[ $fk->{id} ] ||= {
+            local_columns => [],
+            remote_columns => undef,
+            remote_table => $fk->{table}, # patch up in DCSL-land
+        };
+
+        push @{ $rel->{local_columns} }, maybe_lc($fk->{from}, $preserve_case);
+        push @{ $rel->{remote_columns} }, maybe_lc($fk->{to}, $preserve_case) if defined $fk->{to};
+
+        $rel->{attrs} ||= {
+            on_delete => uc $fk->{on_delete},
+            on_update => uc $fk->{on_update},
+        };
+
+        warn "This is supposed to be the same rel but remote_table changed from ",
+            $rel->{remote_table}, " to ", $fk->{table}
+            if $rel->{remote_table} ne $fk->{table};
+    }
+    $sth->finish;
+
+    # now we need to determine whether each FK is DEFERRABLE, this can only be
+    # done by parsing the DDL from sqlite_master
+
+    my $ddl = $dbh->selectcol_arrayref(<<"EOF", undef, $table->name, $table->name)->[0];
+select sql from sqlite_master
+where name = ? and tbl_name = ?
+EOF
+
+    foreach my $fk (@rels) {
+        my $local_cols  = '"?' . (join '"? \s* , \s* "?', map quotemeta, @{ $fk->{local_columns} })        . '"?';
+        my $remote_cols = '"?' . (join '"? \s* , \s* "?', map quotemeta, @{ $fk->{remote_columns} || [] }) . '"?';
+        my ($deferrable_clause) = $ddl =~ /
+                foreign \s+ key \s* \( \s* $local_cols \s* \) \s* references \s* (?:\S+|".+?(?<!")") \s*
+                (?:\( \s* $remote_cols \s* \) \s*)?
+                (?:(?:
+                    on \s+ (?:delete|update) \s+ (?:set \s+ null|set \s+ default|cascade|restrict|no \s+ action)
+                |
+                    match \s* (?:\S+|".+?(?<!")")
+                ) \s*)*
+                ((?:not)? \s* deferrable)?
+        /sxi;
+
+        if ($deferrable_clause) {
+            $fk->{attrs}{is_deferrable} = $deferrable_clause =~ /not/i ? 0 : 1;
+        }
+        else {
+            # check for inline constraint if 1 local column
+            if (@{ $fk->{local_columns} } == 1) {
+                my ($local_col)  = @{ $fk->{local_columns} };
+                my ($remote_col) = @{ $fk->{remote_columns} || [] };
+                $remote_col ||= '';
+
+                my ($deferrable_clause) = $ddl =~ /
+                    "?\Q$local_col\E"? \s* (?:\w+\s*)* (?: \( \s* \d\+ (?:\s*,\s*\d+)* \s* \) )? \s*
+                    references \s+ (?:\S+|".+?(?<!")") (?:\s* \( \s* "?\Q$remote_col\E"? \s* \))? \s*
+                    (?:(?:
+                      on \s+ (?:delete|update) \s+ (?:set \s+ null|set \s+ default|cascade|restrict|no \s+ action)
+                    |
+                      match \s* (?:\S+|".+?(?<!")")
+                    ) \s*)*
+                    ((?:not)? \s* deferrable)?
+                /sxi;
+
+                if ($deferrable_clause) {
+                    $fk->{attrs}{is_deferrable} = $deferrable_clause =~ /not/i ? 0 : 1;
+                }
+                else {
+                    $fk->{attrs}{is_deferrable} = 0;
+                }
+            }
+            else {
+                $fk->{attrs}{is_deferrable} = 0;
+            }
+        }
+    }
+
+    return \@rels;
+}
+
 =head1 SEE ALSO
 
 L<DBIx::Class::Schema::Loader>, L<DBIx::Class::Schema::Loader::Base>,

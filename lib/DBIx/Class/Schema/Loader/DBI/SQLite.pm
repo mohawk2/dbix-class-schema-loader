@@ -68,98 +68,20 @@ sub _columns_info_for {
 
 sub _table_fk_info {
     my ($self, $table) = @_;
-
-    my $sth = $self->dbh->prepare(
-        "pragma foreign_key_list(" . $self->dbh->quote_identifier($table) . ")"
+    my $rels = SQL::Translator::Parser::DCSL::SQLite::table_fk_info(
+        $self->dbh, $table, $self->preserve_case,
     );
-    $sth->execute;
-
-    my @rels;
-    while (my $fk = $sth->fetchrow_hashref) {
-        my $rel = $rels[ $fk->{id} ] ||= {
-            local_columns => [],
-            remote_columns => undef,
-            remote_table => DBIx::Class::Schema::Loader::Table->new(
-                loader => $self,
-                name   => $fk->{table},
-                ($self->db_schema ? (
-                    schema        => $self->db_schema->[0],
-                    ignore_schema => 1,
-                ) : ()),
-            ),
-        };
-
-        push @{ $rel->{local_columns} }, $self->_lc($fk->{from});
-        push @{ $rel->{remote_columns} }, $self->_lc($fk->{to}) if defined $fk->{to};
-
-        $rel->{attrs} ||= {
-            on_delete => uc $fk->{on_delete},
-            on_update => uc $fk->{on_update},
-        };
-
-        warn "This is supposed to be the same rel but remote_table changed from ",
-            $rel->{remote_table}->name, " to ", $fk->{table}
-            if $rel->{remote_table}->name ne $fk->{table};
+    for my $rel (@$rels) {
+        $rel->{remote_table} = DBIx::Class::Schema::Loader::Table->new(
+            loader => $self,
+            name   => $rel->{remote_table},
+            ($self->db_schema ? (
+                schema        => $self->db_schema->[0],
+                ignore_schema => 1,
+            ) : ()),
+        );
     }
-    $sth->finish;
-
-    # now we need to determine whether each FK is DEFERRABLE, this can only be
-    # done by parsing the DDL from sqlite_master
-
-    my $ddl = $self->dbh->selectcol_arrayref(<<"EOF", undef, $table->name, $table->name)->[0];
-select sql from sqlite_master
-where name = ? and tbl_name = ?
-EOF
-
-    foreach my $fk (@rels) {
-        my $local_cols  = '"?' . (join '"? \s* , \s* "?', map quotemeta, @{ $fk->{local_columns} })        . '"?';
-        my $remote_cols = '"?' . (join '"? \s* , \s* "?', map quotemeta, @{ $fk->{remote_columns} || [] }) . '"?';
-        my ($deferrable_clause) = $ddl =~ /
-                foreign \s+ key \s* \( \s* $local_cols \s* \) \s* references \s* (?:\S+|".+?(?<!")") \s*
-                (?:\( \s* $remote_cols \s* \) \s*)?
-                (?:(?:
-                    on \s+ (?:delete|update) \s+ (?:set \s+ null|set \s+ default|cascade|restrict|no \s+ action)
-                |
-                    match \s* (?:\S+|".+?(?<!")")
-                ) \s*)*
-                ((?:not)? \s* deferrable)?
-        /sxi;
-
-        if ($deferrable_clause) {
-            $fk->{attrs}{is_deferrable} = $deferrable_clause =~ /not/i ? 0 : 1;
-        }
-        else {
-            # check for inline constraint if 1 local column
-            if (@{ $fk->{local_columns} } == 1) {
-                my ($local_col)  = @{ $fk->{local_columns} };
-                my ($remote_col) = @{ $fk->{remote_columns} || [] };
-                $remote_col ||= '';
-
-                my ($deferrable_clause) = $ddl =~ /
-                    "?\Q$local_col\E"? \s* (?:\w+\s*)* (?: \( \s* \d\+ (?:\s*,\s*\d+)* \s* \) )? \s*
-                    references \s+ (?:\S+|".+?(?<!")") (?:\s* \( \s* "?\Q$remote_col\E"? \s* \))? \s*
-                    (?:(?:
-                      on \s+ (?:delete|update) \s+ (?:set \s+ null|set \s+ default|cascade|restrict|no \s+ action)
-                    |
-                      match \s* (?:\S+|".+?(?<!")")
-                    ) \s*)*
-                    ((?:not)? \s* deferrable)?
-                /sxi;
-
-                if ($deferrable_clause) {
-                    $fk->{attrs}{is_deferrable} = $deferrable_clause =~ /not/i ? 0 : 1;
-                }
-                else {
-                    $fk->{attrs}{is_deferrable} = 0;
-                }
-            }
-            else {
-                $fk->{attrs}{is_deferrable} = 0;
-            }
-        }
-    }
-
-    return \@rels;
+    return $rels;
 }
 
 sub _table_uniq_info {
