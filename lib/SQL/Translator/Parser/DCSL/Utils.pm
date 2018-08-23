@@ -31,7 +31,7 @@ C<$dbh>, C<$table>
 =cut
 
 sub columns_info_for_quoted {
-    my ($dbh, $table, $preserve_case, $sql_maker) = @_;
+    my ($dbh, $table, $preserve_case) = @_;
 
     my ($result,$raw) = columns_info_for(@_);
 
@@ -64,9 +64,8 @@ sub columns_info_for_quoted {
     return wantarray ? ($result, $raw) : $result;
 }
 
-# $self->schema->storage->sql_maker
 sub columns_info_for {
-    my ($dbh, $table, $preserve_case, $sql_maker) = @_;
+    my ($dbh, $table, $preserve_case) = @_;
 
     my %result;
     my %raw_result;
@@ -100,7 +99,7 @@ sub columns_info_for {
         $sth->finish;
     }
 
-    my $sth = sth_for($dbh, $sql_maker, $table, undef, \'1 = 0');
+    my $sth = sth_for($dbh, $table);
     $sth->execute;
 
     my @columns = @{ $sth->{NAME} };
@@ -183,22 +182,21 @@ sub maybe_uc {
 }
 
 sub sth_for {
-    my ($dbh, $sql_maker, $table, $fields, $where) = @_;
+    my ($dbh, $table) = @_;
     $table = $table->sql_name if ref $table;
-    my $sth = $dbh->prepare($sql_maker
-        ->select(\$table, $fields || \'*', $where));
+    my $sth = $dbh->prepare(qq{select * from $table where 1 = 0});
     return $sth;
 }
 
 # ignore bad tables and views
 sub filter_tables_sql {
-    my ($dbh, $sql_maker, $tables) = @_;
+    my ($dbh, $tables) = @_;
     my @tables = @$tables;
     my @filtered_tables;
     TABLE: for my $table (@tables) {
         try {
             local $^W = 0; # for ADO
-            my $sth = sth_for($dbh, $sql_maker, $table, undef, \'1 = 0');
+            my $sth = sth_for($dbh, $table);
             $sth->execute;
             1;
         }

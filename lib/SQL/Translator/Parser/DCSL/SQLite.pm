@@ -15,7 +15,7 @@ None yet.
 =cut
 
 sub columns_info_for {
-    my ($dbh, $table, $preserve_case, $sql_maker) = @_;
+    my ($dbh, $table, $preserve_case) = @_;
 
     my $result = columns_info_for_quoted(@_);
 
@@ -182,7 +182,7 @@ sub table_uniq_info {
 }
 
 sub tables_list {
-    my ($dbh, $sql_maker) = @_;
+    my ($dbh) = @_;
     my $sth = $dbh->prepare(
         "SELECT * FROM sqlite_master where type in ('table', 'view')"
             . " and tbl_name not like 'sqlite_%'"
@@ -193,7 +193,7 @@ sub tables_list {
         push @tables, $row->{tbl_name};
     }
     $sth->finish;
-    return filter_tables_sql($dbh, $sql_maker, \@tables);
+    return filter_tables_sql($dbh, \@tables);
 }
 
 =head1 SEE ALSO

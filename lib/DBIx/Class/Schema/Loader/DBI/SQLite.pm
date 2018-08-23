@@ -63,7 +63,6 @@ sub _columns_info_for {
 
     return SQL::Translator::Parser::DCSL::SQLite::columns_info_for(
         $self->dbh, $table, $self->preserve_case,
-        $self->schema->storage->sql_maker
     );
 }
 
@@ -96,7 +95,6 @@ sub _tables_list {
     my ($self) = @_;
     my @tables = SQL::Translator::Parser::DCSL::SQLite::tables_list(
         $self->dbh,
-        $self->schema->storage->sql_maker,
     );
     my @table_objs;
     for my $table (@tables) {
