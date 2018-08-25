@@ -204,7 +204,7 @@ _dep_inst_with_test() {
     LASTCMD="$TIMEOUT_CMD cpanm $@"
     $LASTCMD 2>&1
   else
-    LASTCMD="$TIMEOUT_CMD cpan $@"
+    LASTCMD="$TIMEOUT_CMD cpanm $@"
     $LASTCMD 2>&1
 
     # older perls do not have a CPAN which can exit with error on failed install
