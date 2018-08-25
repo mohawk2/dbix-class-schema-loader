@@ -173,6 +173,65 @@ sub tables_list {
     return filter_tables_sql($dbh, \@tables);
 }
 
+# second arg will be a $dbh - temporary code to make here cribbed from ::Parser::DBI until this gets put as ::Parser::DBI::SQLite
+sub parse {
+    my ($tr, $dbh) = @_;
+    my $args = $tr->parser_args;
+    # XXX temp code start
+    $dbh = $args->{'dbh'};
+    my $dsn = $args->{'dsn'};
+    my $db_user = $args->{'db_user'};
+    my $db_password = $args->{'db_password'};
+    my $dbh_is_local;
+    unless ( $dbh ) {
+        die 'No DSN' unless $dsn;
+        $dbh = DBI->connect( $dsn, $db_user, $db_password,
+            {
+                FetchHashKeyName => 'NAME_lc',
+                LongReadLen      => 3000,
+                LongTruncOk      => 1,
+                RaiseError       => 1,
+            }
+        );
+        $dbh_is_local = 1;
+    }
+    die 'No database handle' unless defined $dbh;
+    # XXX temp code end
+    my $preserve_case = $args->{preserve_case};
+    my $schema_name = $args->{schema};
+    my $schema = $tr->schema;
+    my @tables = tables_list($dbh);
+    for my $table_name ( @tables ) {
+        my $table = $schema->add_table( name => $table_name )
+            or die $schema->error;
+        my $cols_info = columns_info_for($dbh, $schema_name, $table_name, $preserve_case);
+        for my $colname ( keys %$cols_info ) {
+            my $info = $cols_info->{$colname};
+            my $field = $table->add_field(
+                name => $colname,
+                %$info,
+            ) or die $table->error;
+            $table->primary_key( $field->name ) if $info->{is_primary_key};
+        }
+        my $fk_info = table_fk_info($dbh, $table, $preserve_case);
+        for my $rel ( @$fk_info ) {
+            my %attrs = %{ $rel->{attrs} };
+            $attrs{deferrable} = delete $attrs{is_deferrable}
+                if exists $attrs{is_deferrable};
+            $table->add_constraint(
+                fields => $rel->{local_columns},
+                reference_table => $rel->{remote_table},
+                reference_fields => $rel->{remote_columns},
+                %attrs,
+            );
+        }
+    }
+    # XXX temp code start
+    eval { $dbh->disconnect } if (defined $dbh and $dbh_is_local);
+    # XXX temp code end
+    return 1;
+}
+
 =head1 SEE ALSO
 
 L<DBIx::Class::Schema::Loader>, L<DBIx::Class::Schema::Loader::Base>,

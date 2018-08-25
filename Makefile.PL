@@ -43,6 +43,7 @@ my %eumm_args = (
         'List::Util'                  => '1.33',
         'MRO::Compat'                 => '0.09',
         'namespace::clean'            => '0.23',
+        'SQL::Translator'             => '0',
         'Scope::Guard'                => '0.20',
         'String::ToIdentifier::EN'    => '0.05',
         'String::CamelCase'           => '0.04',
