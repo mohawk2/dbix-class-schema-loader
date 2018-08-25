@@ -31,7 +31,7 @@ C<$dbh>, C<$table>
 =cut
 
 sub columns_info_for_quoted {
-    my ($dbh, $table, $preserve_case) = @_;
+    my ($dbh, $schema, $table, $preserve_case) = @_;
 
     my ($result,$raw) = columns_info_for(@_);
 
@@ -65,12 +65,12 @@ sub columns_info_for_quoted {
 }
 
 sub columns_info_for {
-    my ($dbh, $table, $preserve_case) = @_;
+    my ($dbh, $schema, $table, $preserve_case) = @_;
 
     my %result;
     my %raw_result;
 
-    if (my $sth = try { $dbh->column_info(undef, $table->schema, $table->name, '%' ) }) {
+    if (my $sth = try { $dbh->column_info(undef, $schema, $table, '%' ) }) {
         COL_INFO: while (my $info = try { $sth->fetchrow_hashref } catch { +{} }) {
             next COL_INFO unless %$info;
 

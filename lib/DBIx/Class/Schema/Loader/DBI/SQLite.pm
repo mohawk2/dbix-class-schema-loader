@@ -62,7 +62,7 @@ sub _columns_info_for {
     my ($table) = @_;
 
     return SQL::Translator::Parser::DCSL::SQLite::columns_info_for(
-        $self->dbh, $table, $self->preserve_case,
+        $self->dbh, $table->schema, $table->name, $self->preserve_case,
     );
 }
 

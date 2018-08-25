@@ -15,7 +15,7 @@ None yet.
 =cut
 
 sub columns_info_for {
-    my ($dbh, $table, $preserve_case) = @_;
+    my ($dbh, $schema, $table, $preserve_case) = @_;
 
     my $result = columns_info_for_quoted(@_);
 
