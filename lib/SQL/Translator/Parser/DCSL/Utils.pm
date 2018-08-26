@@ -10,6 +10,7 @@ use Try::Tiny;
 our @EXPORT_OK = qw/
     columns_info_for_quoted maybe_lc
     filter_tables_sql filter_tables_constraints
+    table_uniq_info
 /;
 
 =head1 NAME
@@ -241,6 +242,35 @@ sub recurse_constraint {
             if $name =~ $re;
     }
     return 0;
+}
+
+sub table_uniq_info {
+    my ($dbh, $table, $preserve_case) = @_;
+    if (not $dbh->can('statistics_info')) {
+        warn "No UNIQUE constraint information can be gathered for this driver";
+        return [];
+    }
+    my %indices;
+    my $sth = $dbh->statistics_info(undef, $table->schema, $table->name, 1, 1);
+    while(my $row = $sth->fetchrow_hashref) {
+        # skip table-level stats, conditional indexes, and any index missing
+        #  critical fields
+        next if $row->{TYPE} eq 'table'
+            || defined $row->{FILTER_CONDITION}
+            || !$row->{INDEX_NAME}
+            || !defined $row->{ORDINAL_POSITION};
+        # starts from 1
+        $indices{$row->{INDEX_NAME}}[$row->{ORDINAL_POSITION} - 1] = maybe_lc($row->{COLUMN_NAME} || '', $preserve_case);
+    }
+    $sth->finish;
+    my @retval;
+    foreach my $index_name (sort keys %indices) {
+        my @cols = @{$indices{$index_name}};
+        # skip indexes with missing column names (e.g. expression indexes)
+        next unless @cols == grep $_, @cols;
+        push(@retval, [ $index_name => \@cols ]);
+    }
+    return \@retval;
 }
 
 1;
