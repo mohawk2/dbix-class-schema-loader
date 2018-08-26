@@ -62,7 +62,7 @@ sub columns_info_for {
 }
 
 sub table_fk_info {
-    my ($dbh, $table, $preserve_case) = @_;
+    my ($dbh, $table) = @_;
 
     my $sth = $dbh->prepare(
         "pragma foreign_key_list(" . $dbh->quote_identifier($table) . ")"
@@ -77,8 +77,8 @@ sub table_fk_info {
             reference_table => $fk->{table},
         };
 
-        push @{ $rel->{fields} }, maybe_lc($fk->{from}, $preserve_case);
-        push @{ $rel->{reference_fields} }, maybe_lc($fk->{to}, $preserve_case) if defined $fk->{to};
+        push @{ $rel->{fields} }, $fk->{from};
+        push @{ $rel->{reference_fields} }, $fk->{to} if defined $fk->{to};
 
         $rel->{attrs} ||= {
             on_delete => uc $fk->{on_delete},

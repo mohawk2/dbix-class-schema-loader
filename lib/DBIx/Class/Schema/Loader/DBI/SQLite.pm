@@ -73,7 +73,7 @@ sub _table_fk_info {
 #        $self->dbh, $self->db_schema, $table->schema, $table->name, $self->preserve_case, $self->{quote_char},
 #    );
     my $constraints = SQL::Translator::Parser::DCSL::SQLite::table_fk_info(
-        $self->dbh, $table, $self->preserve_case,
+        $self->dbh, $table,
     );
     my @rels;
     for my $rel (@$constraints) {
@@ -81,9 +81,9 @@ sub _table_fk_info {
         $attrs{is_deferrable} = delete $attrs{deferrable}
             if exists $attrs{deferrable};
         my $remote_columns = scalar($rel->reference_fields)
-            ? [ $rel->reference_fields ] : undef;
+            ? [ map $self->_lc($_), $rel->reference_fields ] : undef;
         push @rels, {
-            local_columns => [ $rel->field_names ],
+            local_columns => [ map $self->_lc($_), $rel->field_names ],
             remote_columns => $remote_columns,
             remote_table => DBIx::Class::Schema::Loader::Table->new(
                 loader => $self,
