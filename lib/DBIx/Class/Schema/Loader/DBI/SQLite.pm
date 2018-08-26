@@ -66,25 +66,37 @@ sub _columns_info_for {
     );
 }
 
+my @ATTR_KEYS = qw(on_delete on_update deferrable);
 sub _table_fk_info {
     my ($self, $table) = @_;
 #    my $rels = SQL::Translator::Parser::DCSL::Utils::table_fk_info(
 #        $self->dbh, $self->db_schema, $table->schema, $table->name, $self->preserve_case, $self->{quote_char},
 #    );
-    my $rels = SQL::Translator::Parser::DCSL::SQLite::table_fk_info(
+    my $constraints = SQL::Translator::Parser::DCSL::SQLite::table_fk_info(
         $self->dbh, $table, $self->preserve_case,
     );
-    for my $rel (@$rels) {
-        $rel->{remote_table} = DBIx::Class::Schema::Loader::Table->new(
-            loader => $self,
-            name   => $rel->{remote_table},
-            ($self->db_schema ? (
-                schema        => $self->db_schema->[0],
-                ignore_schema => 1,
-            ) : ()),
-        );
+    my @rels;
+    for my $rel (@$constraints) {
+        my %attrs = map { defined($rel->$_) ? ($_ => $rel->$_) : () } @ATTR_KEYS;
+        $attrs{is_deferrable} = delete $attrs{deferrable}
+            if exists $attrs{deferrable};
+        my $remote_columns = scalar($rel->reference_fields)
+            ? [ $rel->reference_fields ] : undef;
+        push @rels, {
+            local_columns => [ $rel->field_names ],
+            remote_columns => $remote_columns,
+            remote_table => DBIx::Class::Schema::Loader::Table->new(
+                loader => $self,
+                name   => $rel->reference_table,
+                ($self->db_schema ? (
+                    schema        => $self->db_schema->[0],
+                    ignore_schema => 1,
+                ) : ()),
+            ),
+            attrs => \%attrs,
+        };
     }
-    return $rels;
+    return \@rels;
 }
 
 sub _table_uniq_info {

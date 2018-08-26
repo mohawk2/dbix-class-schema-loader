@@ -3,6 +3,7 @@ package SQL::Translator::Parser::DCSL::SQLite;
 use strict;
 use warnings;
 use SQL::Translator::Parser::DCSL::Utils qw/columns_info_for_quoted maybe_lc filter_tables_sql/;
+require SQL::Translator::Schema::Constraint;
 
 =head1 NAME
 
@@ -71,13 +72,13 @@ sub table_fk_info {
     my @rels;
     while (my $fk = $sth->fetchrow_hashref) {
         my $rel = $rels[ $fk->{id} ] ||= {
-            local_columns => [],
-            remote_columns => undef,
-            remote_table => $fk->{table}, # patch up in DCSL-land
+            fields => [],
+            reference_fields => undef,
+            reference_table => $fk->{table},
         };
 
-        push @{ $rel->{local_columns} }, maybe_lc($fk->{from}, $preserve_case);
-        push @{ $rel->{remote_columns} }, maybe_lc($fk->{to}, $preserve_case) if defined $fk->{to};
+        push @{ $rel->{fields} }, maybe_lc($fk->{from}, $preserve_case);
+        push @{ $rel->{reference_fields} }, maybe_lc($fk->{to}, $preserve_case) if defined $fk->{to};
 
         $rel->{attrs} ||= {
             on_delete => uc $fk->{on_delete},
@@ -85,8 +86,8 @@ sub table_fk_info {
         };
 
         warn "This is supposed to be the same rel but remote_table changed from ",
-            $rel->{remote_table}, " to ", $fk->{table}
-            if $rel->{remote_table} ne $fk->{table};
+            $rel->{reference_table}, " to ", $fk->{table}
+            if $rel->{reference_table} ne $fk->{table};
     }
     $sth->finish;
 
@@ -98,9 +99,10 @@ select sql from sqlite_master
 where name = ? and tbl_name = ?
 EOF
 
+    my @constraints;
     foreach my $fk (@rels) {
-        my $local_cols  = '"?' . (join '"? \s* , \s* "?', map quotemeta, @{ $fk->{local_columns} })        . '"?';
-        my $remote_cols = '"?' . (join '"? \s* , \s* "?', map quotemeta, @{ $fk->{remote_columns} || [] }) . '"?';
+        my $local_cols  = '"?' . (join '"? \s* , \s* "?', map quotemeta, @{ $fk->{fields} })        . '"?';
+        my $remote_cols = '"?' . (join '"? \s* , \s* "?', map quotemeta, @{ $fk->{reference_fields} || [] }) . '"?';
         my ($deferrable_clause) = $ddl =~ /
                 foreign \s+ key \s* \( \s* $local_cols \s* \) \s* references \s* (?:\S+|".+?(?<!")") \s*
                 (?:\( \s* $remote_cols \s* \) \s*)?
@@ -113,13 +115,13 @@ EOF
         /sxi;
 
         if ($deferrable_clause) {
-            $fk->{attrs}{is_deferrable} = $deferrable_clause =~ /not/i ? 0 : 1;
+            $fk->{attrs}{deferrable} = $deferrable_clause =~ /not/i ? 0 : 1;
         }
         else {
             # check for inline constraint if 1 local column
-            if (@{ $fk->{local_columns} } == 1) {
-                my ($local_col)  = @{ $fk->{local_columns} };
-                my ($remote_col) = @{ $fk->{remote_columns} || [] };
+            if (@{ $fk->{fields} } == 1) {
+                my ($local_col)  = @{ $fk->{fields} };
+                my ($remote_col) = @{ $fk->{reference_fields} || [] };
                 $remote_col ||= '';
 
                 my ($deferrable_clause) = $ddl =~ /
@@ -134,19 +136,26 @@ EOF
                 /sxi;
 
                 if ($deferrable_clause) {
-                    $fk->{attrs}{is_deferrable} = $deferrable_clause =~ /not/i ? 0 : 1;
+                    $fk->{attrs}{deferrable} = $deferrable_clause =~ /not/i ? 0 : 1;
                 }
                 else {
-                    $fk->{attrs}{is_deferrable} = 0;
+                    $fk->{attrs}{deferrable} = 0;
                 }
             }
             else {
-                $fk->{attrs}{is_deferrable} = 0;
+                $fk->{attrs}{deferrable} = 0;
             }
         }
+        push @constraints, SQL::Translator::Schema::Constraint->new(
+            type => 'foreign_key',
+            fields => $fk->{fields},
+            reference_fields => $fk->{reference_fields},
+            reference_table => $fk->{reference_table},
+            %{ $fk->{attrs} },
+        );
     }
 
-    return \@rels;
+    return \@constraints;
 }
 
 sub table_uniq_info {
@@ -215,15 +224,7 @@ sub parse {
         }
         my $fk_info = table_fk_info($dbh, $table, $preserve_case);
         for my $rel ( @$fk_info ) {
-            my %attrs = %{ $rel->{attrs} };
-            $attrs{deferrable} = delete $attrs{is_deferrable}
-                if exists $attrs{is_deferrable};
-            $table->add_constraint(
-                fields => $rel->{local_columns},
-                reference_table => $rel->{remote_table},
-                reference_fields => $rel->{remote_columns},
-                %attrs,
-            );
+            $table->add_constraint($rel);
         }
     }
     # XXX temp code start
