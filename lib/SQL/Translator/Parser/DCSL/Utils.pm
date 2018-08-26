@@ -10,7 +10,7 @@ use Try::Tiny;
 our @EXPORT_OK = qw/
     columns_info_for_quoted maybe_lc
     filter_tables_sql filter_tables_constraints
-    table_uniq_info
+    table_uniq_info table_fk_info
 /;
 
 =head1 NAME
@@ -271,6 +271,79 @@ sub table_uniq_info {
         push(@retval, [ $index_name => \@cols ]);
     }
     return \@retval;
+}
+
+my @fk_rules = (
+    'CASCADE',
+    'RESTRICT',
+    'SET NULL',
+    'NO ACTION',
+    'SET DEFAULT',
+);
+# Find relationships
+sub table_fk_info {
+    my ($dbh, $db_schema, $schema, $table, $preserve_case, $quote_char) = @_;
+    my $sth = try {
+        $dbh->foreign_key_info( '', '', '',
+                                '', ($schema || ''), $table );
+    }
+    catch {
+        warn "Cannot introspect relationships for this driver: $_";
+        return undef;
+    };
+    return [] if !$sth;
+    my %rels;
+    my $i = 1; # for unnamed rels, which hopefully have only 1 column ...
+    REL: while(my $raw_rel = $sth->fetchrow_arrayref) {
+        my $uk_scm  = $raw_rel->[1];
+        my $uk_tbl  = $raw_rel->[2];
+        my $uk_col  = maybe_lc($raw_rel->[3], $preserve_case);
+        my $fk_scm  = $raw_rel->[5];
+        my $fk_col  = maybe_lc($raw_rel->[7], $preserve_case);
+        my $key_seq = $raw_rel->[8] - 1;
+        my $relid   = ($raw_rel->[11] || ( "__dcsld__" . $i++ ));
+        my $update_rule = $raw_rel->[9];
+        my $delete_rule = $raw_rel->[10];
+        $update_rule = $fk_rules[$update_rule] if defined $update_rule;
+        $delete_rule = $fk_rules[$delete_rule] if defined $delete_rule;
+        my $is_deferrable = $raw_rel->[13];
+        ($is_deferrable = $is_deferrable == 7 ? 0 : 1)
+            if defined $is_deferrable;
+        foreach my $var ($uk_scm, $uk_tbl, $uk_col, $fk_scm, $fk_col, $relid) {
+            $var =~ s/[\Q$quote_char\E]//g if defined $var;
+        }
+        if ($db_schema && $db_schema->[0] ne '%'
+            && (not any { $_ eq $uk_scm } @{ $db_schema })) {
+            next REL;
+        }
+        # fix up in DCSL-land to be a DCSL::Table
+        $rels{$relid}{tbl} ||= {
+            name   => $uk_tbl,
+            schema => $uk_scm,
+        };
+        $rels{$relid}{attrs}{on_delete}     = $delete_rule if $delete_rule;
+        $rels{$relid}{attrs}{on_update}     = $update_rule if $update_rule;
+        $rels{$relid}{attrs}{is_deferrable} = $is_deferrable if defined $is_deferrable;
+        # Add this data IN ORDER
+        $rels{$relid}{rcols}[$key_seq] = $uk_col;
+        $rels{$relid}{lcols}[$key_seq] = $fk_col;
+    }
+    $sth->finish;
+    my @rels;
+    foreach my $relid (keys %rels) {
+        push(@rels, {
+            remote_columns => [ grep defined, @{ $rels{$relid}{rcols} } ],
+            local_columns  => [ grep defined, @{ $rels{$relid}{lcols} } ],
+            remote_table   => $rels{$relid}->{tbl},
+            (exists $rels{$relid}{attrs} ?
+                (attrs => $rels{$relid}{attrs})
+                :
+                ()
+            ),
+            _constraint_name => $relid,
+        });
+    }
+    return \@rels;
 }
 
 1;
