@@ -87,7 +87,7 @@ sub _table_fk_info {
 sub _table_uniq_info {
     my ($self, $table) = @_;
     return SQL::Translator::Parser::DCSL::SQLite::table_uniq_info(
-        $self->dbh, $table, $self->preserve_case,
+        $self->dbh, $table->schema, $table->name, $self->preserve_case,
     );
 }
 

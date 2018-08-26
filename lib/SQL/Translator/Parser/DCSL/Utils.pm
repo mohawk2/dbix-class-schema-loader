@@ -245,13 +245,13 @@ sub recurse_constraint {
 }
 
 sub table_uniq_info {
-    my ($dbh, $table, $preserve_case) = @_;
+    my ($dbh, $schema, $table, $preserve_case) = @_;
     if (not $dbh->can('statistics_info')) {
         warn "No UNIQUE constraint information can be gathered for this driver";
         return [];
     }
     my %indices;
-    my $sth = $dbh->statistics_info(undef, $table->schema, $table->name, 1, 1);
+    my $sth = $dbh->statistics_info(undef, $schema, $table, 1, 1);
     while(my $row = $sth->fetchrow_hashref) {
         # skip table-level stats, conditional indexes, and any index missing
         #  critical fields

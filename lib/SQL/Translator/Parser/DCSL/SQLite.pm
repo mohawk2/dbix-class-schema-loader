@@ -150,7 +150,7 @@ EOF
 }
 
 sub table_uniq_info {
-    my ($dbh, $table, $preserve_case) = @_;
+    my ($dbh, $schema, $table, $preserve_case) = @_;
     my $result = SQL::Translator::Parser::DCSL::Utils::table_uniq_info(@_);
     for my $r (@$result) {
         $r->[0] = (join '_', @{$r->[1]}) . '_unique';
