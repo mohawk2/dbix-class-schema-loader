@@ -244,10 +244,13 @@ sub recurse_constraint {
     return 0;
 }
 
+my %dbh2no_stats_info;
 sub table_uniq_info {
     my ($dbh, $schema, $table, $preserve_case) = @_;
+    return [] if $dbh2no_stats_info{"$dbh"};
     if (not $dbh->can('statistics_info')) {
         warn "No UNIQUE constraint information can be gathered for this driver";
+        $dbh2no_stats_info{"$dbh"} = 1;
         return [];
     }
     my %indices;
