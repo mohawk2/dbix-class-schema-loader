@@ -69,7 +69,7 @@ sub _columns_info_for {
 sub _table_fk_info {
     my ($self, $table) = @_;
     my $rels = SQL::Translator::Parser::DCSL::SQLite::table_fk_info(
-        $self->dbh, $table, $self->preserve_case,
+        $self->dbh, $table->name, $self->preserve_case,
     );
     for my $rel (@$rels) {
         $rel->{remote_table} = DBIx::Class::Schema::Loader::Table->new(

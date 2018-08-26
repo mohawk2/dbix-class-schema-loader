@@ -93,7 +93,7 @@ sub table_fk_info {
     # now we need to determine whether each FK is DEFERRABLE, this can only be
     # done by parsing the DDL from sqlite_master
 
-    my $ddl = $dbh->selectcol_arrayref(<<"EOF", undef, $table->name, $table->name)->[0];
+    my $ddl = $dbh->selectcol_arrayref(<<"EOF", undef, $table, $table)->[0];
 select sql from sqlite_master
 where name = ? and tbl_name = ?
 EOF
